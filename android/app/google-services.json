@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "522509536340",
+    "project_id": "rider-sos-igor",
+    "storage_bucket": "rider-sos-igor.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:522509536340:android:3ba047cf50341c807db1c1",
+        "android_client_info": {
+          "package_name": "com.example.rider_sos"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyChcOKypA_Zt1iIb-AodL15NK6A9XQIsm8"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

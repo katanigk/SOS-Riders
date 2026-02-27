@@ -1,0 +1,105 @@
+# =============================================================
+# ROOM 0 — Package Identity
+# =============================================================
+name: rider_sos
+description: "A new Flutter project."
+publish_to: 'none'
+version: 1.0.0+1
+
+# =============================================================
+# ROOM 1 — Environment (Dart SDK constraints)
+# =============================================================
+environment:
+  sdk: ">=3.4.0 <4.0.0"
+
+# =============================================================
+# ROOM 2 — Dependencies
+# =============================================================
+dependencies:
+  # ------------------------------
+  # Room 2.1 — Flutter SDK
+  # ------------------------------
+  flutter:
+    sdk: flutter
+  flutter_localizations:
+    sdk: flutter
+
+  # ------------------------------
+  # Room 2.2 — UI / system
+  # ------------------------------
+  cupertino_icons: ^1.0.8
+  url_launcher: ^6.3.2
+  intl: ^0.20.2
+
+
+  # ------------------------------
+  # Room 2.3 — Location
+  # ------------------------------
+  geolocator: ^13.0.2
+  geocoding: ^3.0.0
+  permission_handler: ^11.3.1
+
+  # ------------------------------
+  # Room 2.4 — Media / local storage
+  # ------------------------------
+  image_picker: ^1.1.2
+  shared_preferences: ^2.3.2
+  path_provider: ^2.1.5
+
+  # ------------------------------
+  # Room 2.5 — Firebase (compatible set)
+  # ------------------------------
+  firebase_core: ^3.15.1
+  cloud_firestore: ^5.5.0
+  firebase_auth: ^5.3.1
+  firebase_messaging: ^15.1.0
+  firebase_storage: ^12.4.10
+
+# =============================================================
+# ROOM 3 — Dev Dependencies
+# =============================================================
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+
+  # ------------------------------
+  # Room 3.1 — Native Splash Generator (RECOMMENDED)
+  # ------------------------------
+  flutter_native_splash: ^2.4.4
+  flutter_launcher_icons: ^0.14.3
+
+# =============================================================
+# ROOM 4 — Flutter
+# =============================================================
+flutter:
+  uses-material-design: true
+
+  # ------------------------------
+  # Room 4.1 — Assets
+  # ------------------------------
+  assets:
+    - assets/splash/
+
+# =============================================================
+# ROOM 5 — Splash Config (flutter_native_splash)
+# =============================================================
+flutter_native_splash:
+  color: "#000000"
+  image: assets/splash/2.png
+  android_gravity: center
+  ios_content_mode: scaleAspectFit
+  android: true
+  ios: true
+  android_12:
+    color: "#000000"
+    image: assets/splash/2.png
+    icon_background_color: "#000000"
+
+# =============================================================
+# ROOM 6 — App Icon (אייקון האפליקציה במסך הבית)
+# =============================================================
+flutter_launcher_icons:
+  android: true
+  ios: true
+  image_path: "assets/splash/baz shahor.png"

@@ -1,0 +1,177 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function myUid() {
+      return request.auth.uid;
+    }
+
+    function isSelf(uid) {
+      return isSignedIn() && myUid() == uid;
+    }
+
+    function isEventParticipantInOpen(eventId) {
+      return isSignedIn()
+        && exists(/databases/$(database)/documents/sos_events_open/$(eventId))
+        && (
+          get(/databases/$(database)/documents/sos_events_open/$(eventId)).data.initiatorUid == myUid()
+          || get(/databases/$(database)/documents/sos_events_open/$(eventId)).data.managerUid == myUid()
+          || exists(/databases/$(database)/documents/sos_events_open/$(eventId)/responders/$(myUid()))
+        );
+    }
+
+    function isEventParticipantInClosed(eventId) {
+      let doc = get(/databases/$(database)/documents/sos_events_closed/$(eventId)).data;
+      return isSignedIn()
+        && exists(/databases/$(database)/documents/sos_events_closed/$(eventId))
+        && (
+          doc.initiatorUid == myUid()
+          || doc.managerUid == myUid()
+          || exists(/databases/$(database)/documents/sos_events_closed/$(eventId)/responders/$(myUid()))
+          || myUid() in doc.get('participantIds', [])
+        );
+    }
+
+    function isEventParticipant(eventId) {
+      return isEventParticipantInOpen(eventId) || isEventParticipantInClosed(eventId);
+    }
+
+    // ======================================================
+    // RIDERS — פרטי פרופיל (שם, מייל, טלפון, תמונות)
+    // ======================================================
+    match /riders/{uid} {
+
+      allow read: if isSelf(uid);
+      allow create, update: if isSelf(uid);
+      allow delete: if false;
+    }
+
+    // ======================================================
+    // RIDER PRESENCE — "רוכבים באזורך"
+    // ======================================================
+    match /rider_presence/{uid} {
+
+      allow read: if isSignedIn();
+      allow create, update: if isSelf(uid);
+      allow delete: if false;
+    }
+
+    // ======================================================
+    // SOS EVENTS — OPEN (אירועים פתוחים)
+    // ======================================================
+    match /sos_events_open/{eventId} {
+
+      allow read: if isEventParticipantInOpen(eventId)
+        || (isSignedIn());
+
+      allow create: if
+        isSignedIn() &&
+        request.resource.data.initiatorUid == myUid() &&
+        request.resource.data.status == "open";
+
+      allow update: if
+        (
+          resource.data.initiatorUid == myUid() &&
+          request.resource.data
+            .diff(resource.data)
+            .changedKeys()
+            .hasOnly(['classification','classificationAt','managerUid','managerPhone','managerType'])
+        )
+        ||
+        (
+          resource.data.initiatorUid == myUid() &&
+          request.resource.data
+            .diff(resource.data)
+            .changedKeys()
+            .hasOnly(['initiatorAddress','initiatorLat','initiatorLng','locationUpdatedAt'])
+        )
+        ||
+        (
+          resource.data.managerUid == null &&
+          resource.data.initiatorUid != myUid() &&
+          isEventParticipantInOpen(eventId) &&
+          request.resource.data
+            .diff(resource.data)
+            .changedKeys()
+            .hasOnly(['managerUid','managerPhone','managerType','managerAt'])
+        )
+        ||
+        (resource.data.managerUid == myUid())
+        ||
+        (
+          isSignedIn() &&
+          request.resource.data.diff(resource.data).changedKeys().hasOnly(['responderCount', 'participantIds']) &&
+          request.resource.data.responderCount == resource.data.get('responderCount', 0) + 1
+        )
+        ||
+        (
+          isSignedIn() &&
+          request.resource.data.diff(resource.data).changedKeys().hasOnly(['responderCount', 'participantIds']) &&
+          request.resource.data.responderCount == resource.data.get('responderCount', 0) - 1 &&
+          request.resource.data.responderCount >= 0
+        )
+        ||
+        (
+          isEventParticipantInOpen(eventId) &&
+          request.resource.data.diff(resource.data).changedKeys().hasOnly(['emergencyCalls'])
+        );
+
+      allow delete: if resource.data.managerUid == myUid();
+
+      match /responders/{uid} {
+        allow read: if isEventParticipantInOpen(eventId) || isSignedIn();
+        allow create, update: if isSelf(uid) && request.resource.data.uid == myUid();
+        allow delete: if isSelf(uid);
+      }
+
+      match /messages/{messageId} {
+        allow read: if isEventParticipantInOpen(eventId);
+        allow create: if
+          isEventParticipantInOpen(eventId) &&
+          request.resource.data.senderUid == myUid() &&
+          request.resource.data.senderName is string &&
+          (
+            (request.resource.data.text is string && request.resource.data.text.size() > 0) ||
+            (request.resource.data.get('imageUrl', '') is string && request.resource.data.get('imageUrl', '').size() > 0)
+          );
+        allow update, delete: if false;
+      }
+    }
+
+    // ======================================================
+    // SOS EVENTS — CLOSED (אירועים סגורים)
+    // ======================================================
+    match /sos_events_closed/{eventId} {
+
+      allow read: if isEventParticipantInClosed(eventId)
+        || (isSignedIn() && request.auth.uid in resource.data.get('participantIds', []));
+
+      allow create: if
+        isSignedIn() &&
+        request.resource.data.managerUid == myUid() &&
+        request.resource.data.status == "closed";
+
+      allow update, delete: if false;
+
+      match /responders/{uid} {
+        allow read: if isEventParticipantInClosed(eventId);
+        allow create: if isSignedIn()
+          && exists(/databases/$(database)/documents/sos_events_open/$(eventId))
+          && get(/databases/$(database)/documents/sos_events_open/$(eventId)).data.managerUid == myUid();
+        allow update, delete: if false;
+      }
+
+      match /messages/{messageId} {
+        allow read: if isEventParticipantInClosed(eventId);
+        allow create: if isSignedIn()
+          && exists(/databases/$(database)/documents/sos_events_open/$(eventId))
+          && get(/databases/$(database)/documents/sos_events_open/$(eventId)).data.managerUid == myUid();
+        allow update, delete: if false;
+      }
+    }
+  }
+}

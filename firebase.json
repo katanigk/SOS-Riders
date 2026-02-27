@@ -1,0 +1,42 @@
+{
+  "storage": {
+    "rules": "storage.rules"
+  },
+  "firestore": {
+    "rules": "firestore.rules",
+    "indexes": "firestore.indexes.json"
+  },
+  "flutter": {
+    "platforms": {
+      "android": {
+        "default": {
+          "projectId": "rider-sos-igor",
+          "appId": "1:522509536340:android:3ba047cf50341c807db1c1",
+          "fileOutput": "android/app/google-services.json"
+        }
+      }
+    }
+  },
+  "dart": {
+    "lib/firebase_options.dart": {
+      "projectId": "rider-sos-igor",
+      "configurations": {
+        "android": "1:522509536340:android:3ba047cf50341c807db1c1"
+      }
+    }
+  },
+  "functions": [
+    {
+      "source": "functions",
+      "codebase": "default",
+      "disallowLegacyRuntimeConfig": true,
+      "ignore": [
+        "node_modules",
+        ".git",
+        "firebase-debug.log",
+        "firebase-debug.*.log",
+        "*.local"
+      ]
+    }
+  ]
+}
