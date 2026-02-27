@@ -10,6 +10,7 @@ import 'package:rider_sos/models/rider_profile.dart';
 import 'package:rider_sos/screens/boot_screen.dart';
 import 'package:rider_sos/screens/open_events_screen.dart';
 import 'package:rider_sos/screens/rider_profile_screen.dart';
+import 'package:rider_sos/screens/pending_riders_screen.dart';
 
 class RiderDrawer extends StatelessWidget {
   final RiderProfile profile;
@@ -87,6 +88,20 @@ class RiderDrawer extends StatelessWidget {
                 );
               },
             ),
+            if (_isAdmin(profile))
+              ListTile(
+                leading: const Icon(Icons.verified),
+                title: const Text('אישור רוכבים'),
+                onTap: () {
+                  Navigator.pop(context);
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => PendingRidersScreen(adminProfile: profile),
+                    ),
+                  );
+                },
+              ),
             ListTile(
               leading: const Icon(Icons.person),
               title: const Text('פרופיל ריידר'),
@@ -221,5 +236,11 @@ class RiderDrawer extends StatelessWidget {
       default:
         return status;
     }
+  }
+
+  bool _isAdmin(RiderProfile profile) {
+    // כרגע: אדמין לפי הטלפון שלך (פורמט מקומי או בינלאומי).
+    return profile.phone == '0526632010' ||
+        profile.phone == '+972526632010';
   }
 }

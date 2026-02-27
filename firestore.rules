@@ -14,6 +14,12 @@ service cloud.firestore {
       return isSignedIn() && myUid() == uid;
     }
 
+    function isAdmin() {
+      return isSignedIn()
+        && exists(/databases/$(database)/documents/riders/$(myUid()))
+        && get(/databases/$(database)/documents/riders/$(myUid())).data.get('role', '') == 'admin';
+    }
+
     function isEventParticipantInOpen(eventId) {
       return isSignedIn()
         && exists(/databases/$(database)/documents/sos_events_open/$(eventId))
@@ -45,9 +51,10 @@ service cloud.firestore {
     // ======================================================
     match /riders/{uid} {
 
-      allow read: if isSelf(uid);
-      allow create, update: if isSelf(uid);
-      allow delete: if false;
+      allow read: if isSelf(uid) || isAdmin();
+      allow create, update: if isSelf(uid) || isAdmin();
+      // מחיקת פרופיל — מותרת רק לעצמי (ולאדמין אם תבחר בעתיד)
+      allow delete: if isSelf(uid);
     }
 
     // ======================================================
