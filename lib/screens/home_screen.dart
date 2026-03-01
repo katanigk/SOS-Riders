@@ -11,6 +11,7 @@ import 'package:geocoding/geocoding.dart';
 import 'package:intl/intl.dart' as intl;
 import 'package:rider_sos/models/rider_profile.dart';
 import 'package:rider_sos/screens/sos_screen.dart';
+import 'package:rider_sos/widgets/enhanced_location_dialog.dart';
 import 'package:rider_sos/widgets/rider_drawer.dart';
 
 // =============================================================
@@ -176,7 +177,9 @@ class _HomeScreenState extends State<HomeScreen> {
         return;
       }
 
-      final pos = await Geolocator.getCurrentPosition();
+      final pos = await Geolocator.getCurrentPosition(
+        locationSettings: const LocationSettings(accuracy: LocationAccuracy.best),
+      );
       final placemarks =
           await placemarkFromCoordinates(pos.latitude, pos.longitude);
 
@@ -195,6 +198,12 @@ class _HomeScreenState extends State<HomeScreen> {
         _addressText = address;
         _cityKey = cityKey;
       });
+
+      if (mounted) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) maybeShowEnhancedLocationDialog(context);
+        });
+      }
 
     } catch (e) {
       setState(() {
@@ -262,6 +271,9 @@ class _HomeMainScreenState extends State<_HomeMainScreen> {
 
   bool _onDuty = false;
   bool _dutySaving = false;
+  DateTime? _dutyStartedAt;
+  Timer? _dutyLimitTimer;
+  bool _dutyLimitDialogShown = false;
 
   bool _sosHolding = false;
   bool _sosTriggered = false;
@@ -326,9 +338,22 @@ class _HomeMainScreenState extends State<_HomeMainScreen> {
         .doc(widget.profile.uid)
         .get();
     if (doc.exists && doc.data()?['onDuty'] == true) {
+      final data = doc.data()!;
+      DateTime? started;
+      final dt = data['dutyStartedAt'];
+      if (dt != null) {
+        if (dt is Timestamp) started = dt.toDate();
+      } else {
+        final last = data['lastSeenAt'];
+        if (last is Timestamp) started = last.toDate();
+      }
       if (mounted) {
-        setState(() => _onDuty = true);
+        setState(() {
+          _onDuty = true;
+          _dutyStartedAt = started ?? DateTime.now();
+        });
         _adjustSheetToSlider();
+        _startDutyLimitCheck();
       }
     }
   }
@@ -338,6 +363,7 @@ class _HomeMainScreenState extends State<_HomeMainScreen> {
     _holdToken++;
     _sosTimer?.cancel();
     _locationRefreshTimer?.cancel();
+    _dutyLimitTimer?.cancel();
     _sheetController.dispose();
     super.dispose();
   }
@@ -346,7 +372,7 @@ class _HomeMainScreenState extends State<_HomeMainScreen> {
   // ROOM 2.1b — Refresh location every 15–20s (display + rider_presence)
   // =============================================================
 
-  static const Duration _locationRefreshInterval = Duration(seconds: 17);
+  static const Duration _locationRefreshInterval = Duration(seconds: 10);
 
   void _startLocationRefresh() {
     _locationRefreshTimer?.cancel();
@@ -356,7 +382,9 @@ class _HomeMainScreenState extends State<_HomeMainScreen> {
   Future<void> _refreshLocation() async {
     if (!mounted) return;
     try {
-      final pos = await Geolocator.getCurrentPosition();
+      final pos = await Geolocator.getCurrentPosition(
+        locationSettings: const LocationSettings(accuracy: LocationAccuracy.best),
+      );
       final placemarks = await placemarkFromCoordinates(pos.latitude, pos.longitude);
       final p = placemarks.isNotEmpty ? placemarks.first : null;
       final city = p?.locality ?? p?.subAdministrativeArea;
@@ -560,7 +588,7 @@ class _HomeMainScreenState extends State<_HomeMainScreen> {
   // ROOM 2.2 — Duty Write
   // =============================================================
 
-  Future<void> _writeDuty(bool onDuty, {double? lat, double? lng}) async {
+  Future<void> _writeDuty(bool onDuty, {double? lat, double? lng, bool setDutyStartedAt = false}) async {
     final uid = widget.profile.uid;
 
     final data = <String, dynamic>{
@@ -571,6 +599,9 @@ class _HomeMainScreenState extends State<_HomeMainScreen> {
       'lastSeenAt': FieldValue.serverTimestamp(),
       'updatedAt': FieldValue.serverTimestamp(),
     };
+    if (setDutyStartedAt && onDuty) {
+      data['dutyStartedAt'] = FieldValue.serverTimestamp();
+    }
     if (lat != null && lng != null) {
       data['lat'] = lat;
       data['lng'] = lng;
@@ -584,16 +615,91 @@ class _HomeMainScreenState extends State<_HomeMainScreen> {
   Future<void> _enterDuty() async {
     if (_dutySaving) return;
     setState(() => _dutySaving = true);
-    await _writeDuty(true);
+    final doc = await FirebaseFirestore.instance.collection('rider_presence').doc(widget.profile.uid).get();
+    final wasOnDuty = doc.exists && (doc.data()?['onDuty'] == true);
+    await _writeDuty(true, setDutyStartedAt: !wasOnDuty);
     if (!mounted) return;
     setState(() {
       _onDuty = true;
       _dutySaving = false;
+      _dutyStartedAt = wasOnDuty ? _dutyStartedAt : DateTime.now();
     });
     _adjustSheetToSlider();
+    _startDutyLimitCheck();
+  }
+
+  static const Duration _dutyLimitHours = Duration(hours: 10);
+  static const Duration _dutyLimitCheckInterval = Duration(minutes: 5);
+  static const Duration _dutyLimitResponseWindow = Duration(minutes: 2);
+
+  void _startDutyLimitCheck() {
+    _dutyLimitTimer?.cancel();
+    if (!_onDuty || _dutyStartedAt == null) return;
+    _dutyLimitTimer = Timer.periodic(_dutyLimitCheckInterval, (_) {
+      if (!mounted || !_onDuty || _dutyStartedAt == null) return;
+      final elapsed = DateTime.now().difference(_dutyStartedAt!);
+      if (elapsed >= _dutyLimitHours && !_dutyLimitDialogShown) {
+        _dutyLimitDialogShown = true;
+        _showDutyLimitDialog();
+      }
+    });
+  }
+
+  Future<void> _showDutyLimitDialog() async {
+    Timer? autoExitTimer;
+    final confirm = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) {
+        autoExitTimer = Timer(_dutyLimitResponseWindow, () {
+          if (ctx.mounted && Navigator.of(ctx).canPop()) {
+            Navigator.of(ctx).pop(null);
+          }
+        });
+        return Directionality(
+          textDirection: TextDirection.rtl,
+          child: AlertDialog(
+            title: const Text('עברו 10 שעות מזמינות'),
+            content: const Text(
+              'עברו 10 שעות מזמינותך. האם אתה עדיין זמין?\n\n'
+              'אם לא תאשר תוך 2 דקות — תרד מזמינות אוטומטית.',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () {
+                  autoExitTimer?.cancel();
+                  Navigator.pop(ctx, false);
+                },
+                child: const Text('לא, לרדת מזמינות'),
+              ),
+              FilledButton(
+                onPressed: () {
+                  autoExitTimer?.cancel();
+                  Navigator.pop(ctx, true);
+                },
+                child: const Text('כן, עדיין זמין'),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+    autoExitTimer?.cancel();
+    _dutyLimitDialogShown = false;
+    if (!mounted) return;
+    if (confirm == true) {
+      _dutyStartedAt = DateTime.now();
+      await FirebaseFirestore.instance
+          .collection('rider_presence')
+          .doc(widget.profile.uid)
+          .update({'dutyStartedAt': FieldValue.serverTimestamp()});
+    } else {
+      await _exitDuty();
+    }
   }
 
   Future<void> _exitDuty() async {
+    _dutyLimitTimer?.cancel();
     if (_dutySaving) return;
     setState(() => _dutySaving = true);
     await _writeDuty(false);
@@ -824,7 +930,7 @@ class _HomeMainScreenState extends State<_HomeMainScreen> {
         child: Stack(
         children: [
           Align(
-            alignment: const Alignment(0, -0.68),
+            alignment: const Alignment(0, -0.92),
             child: GestureDetector(
               onLongPressStart: (_) => _onHoldStart(),
               onLongPressEnd: (_) => _onHoldEnd(),

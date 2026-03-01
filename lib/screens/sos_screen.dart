@@ -21,6 +21,7 @@ import 'package:geolocator/geolocator.dart';
 import 'package:geocoding/geocoding.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:wakelock_plus/wakelock_plus.dart';
 
 import 'package:rider_sos/models/rider_profile.dart';
 
@@ -281,7 +282,7 @@ class _SosScreenState extends State<SosScreen> {
     _liveLocationStarted = true;
 
     _locationTimer?.cancel();
-    const interval = Duration(seconds: 17);
+    const interval = Duration(seconds: 10);
     _locationTimer = Timer.periodic(interval, (_) => _refreshEventLocation());
     // עדכון ראשון מיד
     _refreshEventLocation();
@@ -308,7 +309,9 @@ class _SosScreenState extends State<SosScreen> {
   Future<void> _refreshEventLocation() async {
     if (!mounted) return;
     try {
-      final pos = await Geolocator.getCurrentPosition();
+      final pos = await Geolocator.getCurrentPosition(
+        locationSettings: const LocationSettings(accuracy: LocationAccuracy.best),
+      );
       final placemarks = await placemarkFromCoordinates(pos.latitude, pos.longitude);
       final p = placemarks.isNotEmpty ? placemarks.first : null;
       final address = _formatAddress(p, pos.latitude, pos.longitude);
@@ -622,12 +625,12 @@ class _SosScreenState extends State<SosScreen> {
     (service: 'מדא', phone: '101', icon: Icons.local_hospital, displayPhone: null),
     (service: 'מכבי אש', phone: '102', icon: Icons.local_fire_department, displayPhone: null),
     (service: 'מוקד עירוני', phone: '106', icon: Icons.phone, displayPhone: null),
-    (service: 'פיילוט', phone: '0526632010', icon: Icons.security, displayPhone: '911'),
+    (service: 'פיילוט', phone: '0524719366', icon: Icons.security, displayPhone: '911'),
   ];
 
-  void _showReinforcementSheet(BuildContext context) {
+  void _showReinforcementSheet(BuildContext sheetContext) {
     showModalBottomSheet(
-      context: context,
+      context: sheetContext,
       builder: (ctx) => SafeArea(
         child: Padding(
           padding: const EdgeInsets.all(20),
@@ -650,7 +653,7 @@ class _SosScreenState extends State<SosScreen> {
                 trailing: Text(s.displayPhone ?? s.phone, style: const TextStyle(fontWeight: FontWeight.w700)),
                 onTap: () {
                   Navigator.pop(ctx);
-                  _callAndRecordReinforcement(s.service, s.phone);
+                  _callAndRecordReinforcement(sheetContext, s.service, s.phone);
                 },
               )),
             ],
@@ -660,11 +663,8 @@ class _SosScreenState extends State<SosScreen> {
     );
   }
 
-  Future<void> _callAndRecordReinforcement(String service, String phone) async {
-    final uri = Uri(scheme: 'tel', path: phone);
-    try {
-      await launchUrl(uri, mode: LaunchMode.externalApplication);
-    } catch (_) {}
+  Future<void> _callAndRecordReinforcement(BuildContext context, String service, String phone) async {
+    // עדכון Firestore קודם — כדי שהממשק יתעדכן מיד (לפני פתיחת אפליקציית החיוג)
     try {
       await FirebaseFirestore.instance
           .collection(_eventsCollection)
@@ -676,10 +676,21 @@ class _SosScreenState extends State<SosScreen> {
             'phone': phone,
             'calledBy': widget.profile.uid,
             'calledByPhone': widget.profile.phone,
-            'calledAt': FieldValue.serverTimestamp(),
+            'calledAt': Timestamp.now(),
           },
         ]),
       });
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('שגיאה ברישום התגבורת: $e')),
+        );
+      }
+      return;
+    }
+    try {
+      final uri = Uri(scheme: 'tel', path: phone);
+      await launchUrl(uri, mode: LaunchMode.externalApplication);
     } catch (_) {}
   }
 
@@ -689,11 +700,15 @@ class _SosScreenState extends State<SosScreen> {
   @override
   void initState() {
     super.initState();
-    if (!widget.isClosed) _startClassificationTimer();
+    if (!widget.isClosed) {
+      _startClassificationTimer();
+      WakelockPlus.enable();
+    }
   }
 
   @override
   void dispose() {
+    if (!widget.isClosed) WakelockPlus.disable();
     _classificationTimer?.cancel();
     _locationTimer?.cancel();
     _closeTimer?.cancel();
@@ -1157,7 +1172,7 @@ class _SosInfoSheetState extends State<_SosInfoSheet> {
   @override
   void initState() {
     super.initState();
-    _refreshTimer = Timer.periodic(const Duration(seconds: 17), (_) {
+    _refreshTimer = Timer.periodic(const Duration(seconds: 10), (_) {
       if (mounted) setState(() {});
     });
   }
@@ -1220,6 +1235,15 @@ class _SosInfoSheetState extends State<_SosInfoSheet> {
 // -------------------------------------------------------------
 // Room 11.7.1 — Sheet Body (extracted for clarity)
 // -------------------------------------------------------------
+// מיפוי שם כוח -> אייקון (לצג "כוחות שהוקפצו")
+const Map<String, IconData> _serviceIcons = {
+  'משטרה': Icons.local_police,
+  'מדא': Icons.local_hospital,
+  'מכבי אש': Icons.local_fire_department,
+  'מוקד עירוני': Icons.phone,
+  'פיילוט': Icons.security,
+};
+
 class _SheetBody extends StatelessWidget {
   final String eventId;
   final String eventsCol;
@@ -1434,10 +1458,32 @@ class _SheetBody extends StatelessWidget {
                                         .where((s) => s.isNotEmpty)
                                         .toSet()
                                         .toList();
-                                    return Text(
-                                      services.isEmpty ? '—' : services.join(', '),
-                                      style: const TextStyle(fontSize: 14),
+                                    if (services.isEmpty) {
+                                      return const Text(
+                                        '—',
+                                        style: TextStyle(fontSize: 14),
+                                        textDirection: TextDirection.rtl,
+                                      );
+                                    }
+                                    return Wrap(
+                                      spacing: 12,
+                                      runSpacing: 8,
                                       textDirection: TextDirection.rtl,
+                                      children: services.map((name) {
+                                        final icon = _serviceIcons[name] ?? Icons.phone;
+                                        return Padding(
+                                          padding: const EdgeInsets.only(left: 4),
+                                          child: Row(
+                                            mainAxisSize: MainAxisSize.min,
+                                            crossAxisAlignment: CrossAxisAlignment.center,
+                                            children: [
+                                              Icon(icon, size: 22, color: Colors.red.shade700),
+                                              const SizedBox(width: 6),
+                                              Text(name, style: const TextStyle(fontSize: 14), textDirection: TextDirection.rtl),
+                                            ],
+                                          ),
+                                        );
+                                      }).toList(),
                                     );
                                   },
                                 ),

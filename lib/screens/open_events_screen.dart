@@ -67,6 +67,7 @@ class _OpenEventsScreenState extends State<OpenEventsScreen>
       }
       final pos = await Geolocator.getCurrentPosition(
         locationSettings: const LocationSettings(
+          accuracy: LocationAccuracy.best,
           timeLimit: Duration(seconds: 10),
         ),
       );

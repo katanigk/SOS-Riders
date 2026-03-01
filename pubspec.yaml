@@ -4,7 +4,11 @@
 name: rider_sos
 description: "A new Flutter project."
 publish_to: 'none'
-version: 1.0.0+1
+# ⚠️ כללי גרסה (מעכשיו):
+#   • build (+N): בכל build שמפיץ — חובה
+#   • minor (Y): כשיש שינוי משמעותי — פיצ'ר חדש, תיקון חשוב
+#   • major (X): שינוי גדול — רדיזיין, breaking changes
+version: 1.0.6+6
 
 # =============================================================
 # ROOM 1 — Environment (Dart SDK constraints)
@@ -45,6 +49,8 @@ dependencies:
   image_picker: ^1.1.2
   shared_preferences: ^2.3.2
   path_provider: ^2.1.5
+  package_info_plus: ^8.0.0
+  wakelock_plus: ^1.2.8
 
   # ------------------------------
   # Room 2.5 — Firebase (compatible set)
@@ -54,6 +60,7 @@ dependencies:
   firebase_auth: ^5.3.1
   firebase_messaging: ^15.1.0
   firebase_storage: ^12.4.10
+  flutter_local_notifications: ^18.0.1
 
 # =============================================================
 # ROOM 3 — Dev Dependencies

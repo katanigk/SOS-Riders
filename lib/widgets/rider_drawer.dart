@@ -6,11 +6,13 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 import 'package:rider_sos/models/rider_profile.dart';
 import 'package:rider_sos/screens/boot_screen.dart';
 import 'package:rider_sos/screens/open_events_screen.dart';
 import 'package:rider_sos/screens/rider_profile_screen.dart';
 import 'package:rider_sos/screens/pending_riders_screen.dart';
+import 'package:rider_sos/screens/active_riders_screen.dart';
 
 class RiderDrawer extends StatelessWidget {
   final RiderProfile profile;
@@ -19,8 +21,6 @@ class RiderDrawer extends StatelessWidget {
     super.key,
     required this.profile,
   });
-
-  static const String _appVersion = '0.1.0';
 
   @override
   Widget build(BuildContext context) {
@@ -88,7 +88,7 @@ class RiderDrawer extends StatelessWidget {
                 );
               },
             ),
-            if (_isAdmin(profile))
+            if (_isAdmin(profile)) ...[
               ListTile(
                 leading: const Icon(Icons.verified),
                 title: const Text('אישור רוכבים'),
@@ -102,6 +102,20 @@ class RiderDrawer extends StatelessWidget {
                   );
                 },
               ),
+              ListTile(
+                leading: const Icon(Icons.people),
+                title: const Text('ריידרים במצב פעיל'),
+                onTap: () {
+                  Navigator.pop(context);
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => ActiveRidersScreen(adminProfile: profile),
+                    ),
+                  );
+                },
+              ),
+            ],
             ListTile(
               leading: const Icon(Icons.person),
               title: const Text('פרופיל ריידר'),
@@ -144,15 +158,22 @@ class RiderDrawer extends StatelessWidget {
               onTap: () => _showDeleteProfileDialog(context),
             ),
             const Spacer(),
-            Padding(
-              padding: const EdgeInsets.all(16),
-              child: Text(
-                'גרסה $_appVersion',
-                style: TextStyle(
-                  color: Theme.of(context).colorScheme.onSurfaceVariant,
-                  fontSize: 12,
-                ),
-              ),
+            FutureBuilder<PackageInfo>(
+              future: PackageInfo.fromPlatform(),
+              builder: (context, snap) {
+                final v = snap.data?.version ?? '?';
+                final b = snap.data?.buildNumber ?? '';
+                return Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Text(
+                    'גרסה $v${b.isNotEmpty ? ' ($b)' : ''}',
+                    style: TextStyle(
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                      fontSize: 12,
+                    ),
+                  ),
+                );
+              },
             ),
           ],
         ),

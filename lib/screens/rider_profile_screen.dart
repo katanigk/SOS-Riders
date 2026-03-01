@@ -1,9 +1,11 @@
 // =============================================================
 // PROJECT: rider_profile_screen.dart
 // DEPARTMENT 1 — Rider Profile View (Read-Only)
+// רענון אוטומטי מפרופיל ב-Firestore (תמונות, פרטים)
 // =============================================================
 
 import 'package:flutter/material.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:rider_sos/models/rider_profile.dart';
 import 'package:rider_sos/screens/edit_profile_screen.dart';
 
@@ -14,6 +16,44 @@ class RiderProfileScreen extends StatelessWidget {
     super.key,
     required this.profile,
   });
+
+  static RiderProfile _fromSnapshot(DocumentSnapshot<Map<String, dynamic>> doc) {
+    final data = doc.data()!;
+    return RiderProfile(
+      uid: data['uid'],
+      firstName: data['firstName'],
+      lastName: data['lastName'],
+      fullName: data['fullName'],
+      email: data['email'],
+      phone: data['phone'],
+      bikePhotoUrls: List<String>.from(data['bikePhotoUrls'] ?? []),
+      avatarUrl: data['avatarUrl'] as String?,
+      status: data['status'] ?? 'pending',
+      fcmToken: data['fcmToken'],
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
+      stream: FirebaseFirestore.instance
+          .collection('riders')
+          .doc(profile.uid)
+          .snapshots(),
+      builder: (context, snap) {
+        final p = snap.hasData && snap.data!.exists
+            ? _fromSnapshot(snap.data!)
+            : profile;
+        return _ProfileBody(profile: p);
+      },
+    );
+  }
+}
+
+class _ProfileBody extends StatelessWidget {
+  final RiderProfile profile;
+
+  const _ProfileBody({required this.profile});
 
   @override
   Widget build(BuildContext context) {

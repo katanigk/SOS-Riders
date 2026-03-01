@@ -5,6 +5,7 @@
 
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 
 import 'login_screen.dart';
@@ -123,11 +124,30 @@ class _BootScreenState extends State<BootScreen> {
       // -----------------------------------------------------------
       // CASE 7 — ACTIVE → Home
       // -----------------------------------------------------------
+      await _registerFcmToken();
       _setNext(HomeScreen(profile: profile));
     } catch (e) {
       debugPrint("BOOT ERROR: $e");
       _setNext(const RegistrationScreen());
     }
+  }
+
+  // =============================================================
+  // ROOM 1.2b — FCM Token (להתראות אירוע מצוקה)
+  // =============================================================
+
+  Future<void> _registerFcmToken() async {
+    try {
+      final settings = await FirebaseMessaging.instance.requestPermission();
+      if (settings.authorizationStatus != AuthorizationStatus.authorized &&
+          settings.authorizationStatus != AuthorizationStatus.provisional) {
+        return;
+      }
+      final token = await FirebaseMessaging.instance.getToken();
+      if (token != null && token.isNotEmpty) {
+        await RiderProfile.updateFcmToken(token);
+      }
+    } catch (_) {}
   }
 
   // =============================================================
