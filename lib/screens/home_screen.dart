@@ -233,7 +233,46 @@ class _HomeScreenState extends State<HomeScreen> {
 
     if (!_locationOk) {
       return Scaffold(
-        body: Center(child: Text(_locationError ?? 'שגיאת מיקום')),
+        body: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(
+                  Icons.location_off,
+                  size: 56,
+                  color: Colors.redAccent,
+                ),
+                const SizedBox(height: 16),
+                Text(
+                  _locationError ?? 'שירותי המיקום כבויים',
+                  style: const TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w600,
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 12),
+                const Text(
+                  'יש להפעיל את שירותי המיקום במכשיר ואז ללחוץ \"נסה שוב\".',
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 24),
+                FilledButton(
+                  onPressed: () {
+                    setState(() {
+                      _checkingLocation = true;
+                      _locationError = null;
+                    });
+                    _checkLocationGate();
+                  },
+                  child: const Text('נסה שוב'),
+                ),
+              ],
+            ),
+          ),
+        ),
       );
     }
 
@@ -296,6 +335,30 @@ class _HomeMainScreenState extends State<_HomeMainScreen> {
       DraggableScrollableController();
 
   static const double _sheetSizeGreenVisible = 0.46;
+
+  String _greetingForNow() {
+    final hour = DateTime.now().hour;
+    if (hour >= 5 && hour < 12) return 'בוקר טוב';
+    if (hour >= 12 && hour < 17) return 'צהריים טובים';
+    if (hour >= 17 && hour < 22) return 'ערב טוב';
+    return 'לילה טוב';
+  }
+
+  Widget _buildRatingStars(double rating) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: List.generate(5, (i) {
+        final value = i + 1;
+        if (rating >= value) {
+          return Icon(Icons.star, color: Colors.amber[700], size: 22);
+        }
+        if (rating > value - 1) {
+          return Icon(Icons.star_half, color: Colors.amber[700], size: 22);
+        }
+        return Icon(Icons.star_border, color: Colors.amber[700], size: 22);
+      }),
+    );
+  }
 
   void _adjustSheetToSlider() {
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -880,6 +943,11 @@ class _HomeMainScreenState extends State<_HomeMainScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final isClub =
+        widget.profile.role == 'club' || widget.profile.role == 'admin';
+    final appBarLogoAsset =
+        isClub ? 'assets/splash/CLUB.PNG' : 'assets/splash/riderssos.png';
+
     return Scaffold(
       backgroundColor: Theme.of(context).colorScheme.surface,
       appBar: AppBar(
@@ -918,13 +986,13 @@ class _HomeMainScreenState extends State<_HomeMainScreen> {
         title: Transform.translate(
           offset: const Offset(0, -62),
           child: Image.asset(
-            'assets/splash/riderssos.png',
+            appBarLogoAsset,
             height: 150,
             fit: BoxFit.contain,
           ),
         ),
       ),
-      drawer: RiderDrawer(profile: widget.profile),
+      drawer: RiderDrawer(profile: widget.profile, onDuty: _onDuty),
       body: Container(
         color: Theme.of(context).colorScheme.surface,
         child: Stack(
@@ -998,6 +1066,114 @@ class _HomeMainScreenState extends State<_HomeMainScreen> {
                       ),
                     ),
                   ),
+                  if (isClub) ...[
+                    Text(
+                      '${_greetingForNow()}, ${widget.profile.fullName}',
+                      style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                            fontWeight: FontWeight.bold,
+                          ),
+                      textDirection: TextDirection.rtl,
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      'מה הלקוחות חושבים עליך:',
+                      style: TextStyle(
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                        fontSize: 14,
+                      ),
+                      textDirection: TextDirection.rtl,
+                    ),
+                    const SizedBox(height: 6),
+                    StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+                      stream: FirebaseFirestore.instance
+                          .collection('orders')
+                          .where('riderUid', isEqualTo: widget.profile.uid)
+                          .orderBy('createdAt', descending: true)
+                          .limit(80)
+                          .snapshots(),
+                      builder: (context, snap) {
+                        final allDocs = snap.hasData ? snap.data!.docs : [];
+                        final docs = allDocs
+                            .where((d) => d.data()['customerRating'] != null)
+                            .toList();
+                        if (docs.isEmpty) {
+                          return Row(
+                            textDirection: TextDirection.rtl,
+                            children: [
+                              _buildRatingStars(0),
+                              const SizedBox(width: 8),
+                              Text(
+                                '(עדיין אין דירוגים)',
+                                style: TextStyle(
+                                  color: Theme.of(context)
+                                      .colorScheme
+                                      .onSurfaceVariant
+                                      .withValues(alpha: 0.8),
+                                  fontSize: 13,
+                                ),
+                                textDirection: TextDirection.rtl,
+                              ),
+                            ],
+                          );
+                        }
+                        var sum = 0.0;
+                        for (final d in docs) {
+                          final r = (d.data()['customerRating'] as num?)?.toDouble();
+                          if (r != null) sum += r;
+                        }
+                        final avg = sum / docs.length;
+                        final recentComments = docs
+                            .map((d) =>
+                                (d.data()['customerRatingComment'] as String?)?.trim())
+                            .where((c) => c != null && c.isNotEmpty)
+                            .take(2)
+                            .toList();
+                        return Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              textDirection: TextDirection.rtl,
+                              children: [
+                                _buildRatingStars(avg),
+                                const SizedBox(width: 8),
+                                Text(
+                                  '${avg.toStringAsFixed(1)} (${docs.length} ביקורות)',
+                                  style: TextStyle(
+                                    color: Theme.of(context)
+                                        .colorScheme
+                                        .onSurfaceVariant,
+                                    fontSize: 13,
+                                  ),
+                                  textDirection: TextDirection.rtl,
+                                ),
+                              ],
+                            ),
+                            if (recentComments.isNotEmpty) ...[
+                              const SizedBox(height: 8),
+                              ...recentComments.map((c) => Padding(
+                                    padding: const EdgeInsets.only(top: 4),
+                                    child: Text(
+                                      '"${c ?? ''}"',
+                                      style: TextStyle(
+                                        fontStyle: FontStyle.italic,
+                                        color: Theme.of(context)
+                                            .colorScheme
+                                            .onSurfaceVariant
+                                            .withValues(alpha: 0.9),
+                                        fontSize: 12,
+                                      ),
+                                      maxLines: 2,
+                                      overflow: TextOverflow.ellipsis,
+                                      textDirection: TextDirection.rtl,
+                                    ),
+                                  )),
+                            ],
+                          ],
+                        );
+                      },
+                    ),
+                    const SizedBox(height: 20),
+                  ],
                   Text(
                     _displayCity
                         ? _cityText

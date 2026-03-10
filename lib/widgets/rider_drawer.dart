@@ -13,67 +13,59 @@ import 'package:rider_sos/screens/open_events_screen.dart';
 import 'package:rider_sos/screens/rider_profile_screen.dart';
 import 'package:rider_sos/screens/pending_riders_screen.dart';
 import 'package:rider_sos/screens/active_riders_screen.dart';
+import 'package:rider_sos/screens/my_deliveries_screen.dart';
 
 class RiderDrawer extends StatelessWidget {
   final RiderProfile profile;
+  /// האם הריידר במצב פעיל (להצגת האזהרה למועדון)
+  final bool? onDuty;
 
   const RiderDrawer({
     super.key,
     required this.profile,
+    this.onDuty,
   });
 
   @override
   Widget build(BuildContext context) {
+    final isClub = _isClub(profile);
+    final duty = onDuty ?? false;
+
     return Drawer(
       child: SafeArea(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            // Header
-            Container(
-              padding: const EdgeInsets.all(20),
-              color: Theme.of(context).colorScheme.primaryContainer,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  CircleAvatar(
-                    radius: 32,
-                    backgroundColor: Theme.of(context).colorScheme.primary,
-                    backgroundImage: profile.avatarUrl != null &&
-                            profile.avatarUrl!.isNotEmpty
-                        ? NetworkImage(profile.avatarUrl!)
-                        : null,
-                    child: profile.avatarUrl == null ||
-                            profile.avatarUrl!.isEmpty
-                        ? Text(
-                            profile.fullName.isNotEmpty
-                                ? profile.fullName[0].toUpperCase()
-                                : '?',
-                            style: TextStyle(
-                              color: Theme.of(context).colorScheme.onPrimary,
-                              fontSize: 24,
-                            ),
-                          )
-                        : null,
+            _StandardHeader(profile: profile),
+            if (isClub && !duty)
+              Container(
+                margin: const EdgeInsets.symmetric(horizontal: 16),
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Theme.of(context).colorScheme.errorContainer.withValues(alpha: 0.5),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(
+                    color: Theme.of(context).colorScheme.error.withValues(alpha: 0.5),
                   ),
-                  const SizedBox(height: 12),
-                  Text(
-                    profile.fullName,
-                    style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                          fontWeight: FontWeight.bold,
+                ),
+                child: Row(
+                  textDirection: TextDirection.rtl,
+                  children: [
+                    Icon(Icons.info_outline, size: 20, color: Theme.of(context).colorScheme.error),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'כדי לקבל הזמנות מלקוחות ולראות אירועים בגזרה — עבור למצב פעיל',
+                        style: TextStyle(
+                          fontSize: 13,
+                          color: Theme.of(context).colorScheme.onErrorContainer,
                         ),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    _statusLabel(profile.status),
-                    style: TextStyle(
-                      color: Theme.of(context).colorScheme.onSurfaceVariant,
-                      fontSize: 14,
+                        textDirection: TextDirection.rtl,
+                      ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
-            ),
             const SizedBox(height: 8),
             ListTile(
               leading: const Icon(Icons.event_note),
@@ -88,6 +80,46 @@ class RiderDrawer extends StatelessWidget {
                 );
               },
             ),
+            if (_isClub(profile)) ...[
+              ListTile(
+                leading: const Icon(Icons.local_shipping),
+                title: const Text('המשלוחים שלי'),
+                subtitle: const Text('משלוחים שביצעתי לפי תקופה'),
+                onTap: () {
+                  Navigator.pop(context);
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => MyDeliveriesScreen(profile: profile),
+                    ),
+                  );
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.workspace_premium),
+                title: const Text('אזור המועדון'),
+                subtitle: const Text('פיצ׳רים מיוחדים לריידרי המועדון'),
+                onTap: () {
+                  Navigator.pop(context);
+                  showDialog<void>(
+                    context: context,
+                    builder: (ctx) => AlertDialog(
+                      title: const Text('אזור המועדון'),
+                      content: const Text(
+                        'כאן נוסיף בהמשך כלים ופיצ׳רים מיוחדים לריידרים במועדון (Club Rider).',
+                        textDirection: TextDirection.rtl,
+                      ),
+                      actions: [
+                        TextButton(
+                          onPressed: () => Navigator.pop(ctx),
+                          child: const Text('סגור'),
+                        ),
+                      ],
+                    ),
+                  );
+                },
+              ),
+            ],
             if (_isAdmin(profile)) ...[
               ListTile(
                 leading: const Icon(Icons.verified),
@@ -246,22 +278,80 @@ class RiderDrawer extends StatelessWidget {
     });
   }
 
-  String _statusLabel(String status) {
-    switch (status) {
-      case 'active':
-        return 'פעיל';
-      case 'pending':
-        return 'ממתין לאישור';
-      case 'blocked':
-        return 'חסום';
-      default:
-        return status;
-    }
+  bool _isAdmin(RiderProfile profile) {
+    return profile.role == 'admin';
   }
 
-  bool _isAdmin(RiderProfile profile) {
-    // כרגע: אדמין לפי הטלפון שלך (פורמט מקומי או בינלאומי).
-    return profile.phone == '0526632010' ||
-        profile.phone == '+972526632010';
+  bool _isClub(RiderProfile profile) {
+    return profile.role == 'club' || profile.role == 'admin';
+  }
+
+  static String _roleLabel(RiderProfile profile) {
+    switch (profile.role) {
+      case 'admin':
+        return 'אדמין · ריידר מועדון';
+      case 'club':
+        return 'ריידר מועדון';
+      case 'community':
+      default:
+        return 'ריידר קהילה';
+    }
+  }
+}
+
+// =============================================================
+// Header סטנדרטי
+// =============================================================
+
+class _StandardHeader extends StatelessWidget {
+  final RiderProfile profile;
+
+  const _StandardHeader({required this.profile});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(20),
+      color: Theme.of(context).colorScheme.primaryContainer,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          CircleAvatar(
+            radius: 32,
+            backgroundColor: Theme.of(context).colorScheme.primary,
+            backgroundImage: profile.avatarUrl != null &&
+                    profile.avatarUrl!.isNotEmpty
+                ? NetworkImage(profile.avatarUrl!)
+                : null,
+            child: profile.avatarUrl == null || profile.avatarUrl!.isEmpty
+                ? Text(
+                    profile.fullName.isNotEmpty
+                        ? profile.fullName[0].toUpperCase()
+                        : '?',
+                    style: TextStyle(
+                      color: Theme.of(context).colorScheme.onPrimary,
+                      fontSize: 24,
+                    ),
+                  )
+                : null,
+          ),
+          const SizedBox(height: 12),
+          Text(
+            profile.fullName,
+            style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                  fontWeight: FontWeight.bold,
+                ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            RiderDrawer._roleLabel(profile),
+            style: TextStyle(
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
+              fontSize: 14,
+            ),
+          ),
+        ],
+      ),
+    );
   }
 }

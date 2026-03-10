@@ -20,6 +20,8 @@ class RiderProfile {
   final String email;
   final String phone;
   final List<String> bikePhotoUrls;
+  /// app role: community / club / admin
+  final String role;
   final String? avatarUrl;
   final String status; // pending / active / blocked
   final String? fcmToken;
@@ -32,6 +34,7 @@ class RiderProfile {
     required this.email,
     required this.phone,
     required this.bikePhotoUrls,
+    required this.role,
     this.avatarUrl,
     required this.status,
     required this.fcmToken,
@@ -85,6 +88,8 @@ class RiderProfile {
       'email': email,
       'phone': phone,
       'bikePhotoUrls': urls,
+      // default social role — basic community rider
+      'role': 'community',
       'status': 'pending', // 👈 חשוב
       'createdAt': now,
       'updatedAt': now,
@@ -99,6 +104,7 @@ class RiderProfile {
       email: email,
       phone: phone,
       bikePhotoUrls: urls,
+      role: 'community',
       avatarUrl: null,
       status: 'pending',
       fcmToken: null,
@@ -130,6 +136,7 @@ class RiderProfile {
       email: data['email'],
       phone: data['phone'],
       bikePhotoUrls: List<String>.from(data['bikePhotoUrls'] ?? []),
+      role: data['role'] ?? 'community',
       avatarUrl: data['avatarUrl'] as String?,
       status: data['status'] ?? 'pending',
       fcmToken: data['fcmToken'],

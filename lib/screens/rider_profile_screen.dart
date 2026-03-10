@@ -27,6 +27,7 @@ class RiderProfileScreen extends StatelessWidget {
       email: data['email'],
       phone: data['phone'],
       bikePhotoUrls: List<String>.from(data['bikePhotoUrls'] ?? []),
+      role: data['role'] ?? 'community',
       avatarUrl: data['avatarUrl'] as String?,
       status: data['status'] ?? 'pending',
       fcmToken: data['fcmToken'],

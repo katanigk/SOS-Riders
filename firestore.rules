@@ -20,6 +20,15 @@ service cloud.firestore {
         && get(/databases/$(database)/documents/riders/$(myUid())).data.get('role', '') == 'admin';
     }
 
+    function isRiderClubOrAdmin() {
+      return isSignedIn()
+        && exists(/databases/$(database)/documents/riders/$(myUid()))
+        && (
+          get(/databases/$(database)/documents/riders/$(myUid())).data.get('role', '') == 'club'
+          || get(/databases/$(database)/documents/riders/$(myUid())).data.get('role', '') == 'admin'
+        );
+    }
+
     function isEventParticipantInOpen(eventId) {
       return isSignedIn()
         && exists(/databases/$(database)/documents/sos_events_open/$(eventId))
@@ -55,6 +64,73 @@ service cloud.firestore {
       allow create, update: if isSelf(uid) || isAdmin();
       // מחיקת פרופיל — מותרת רק לעצמי (ולאדמין אם תבחר בעתיד)
       allow delete: if isSelf(uid);
+    }
+
+    // ======================================================
+    // CUSTOMERS — פרופיל לקוח (שם, טלפון, העדפות תשלום)
+    // ======================================================
+    match /customers/{uid} {
+
+      // הלקוח רואה ומעדכן רק את עצמו, אדמין יכול לקרוא הכל
+      allow read: if isSelf(uid) || isAdmin();
+      allow create, update: if isSelf(uid) || isAdmin();
+      allow delete: if isSelf(uid);
+    }
+
+    // ======================================================
+    // ORDERS — הזמנות נסיעה
+    // ======================================================
+    match /orders/{orderId} {
+
+      // קריאה:
+      // - הלקוח רואה רק את ההזמנות שלו
+      // - הריידר רואה הזמנות שלקח (riderUid == myUid)
+      // - ריידר מועדון / אדמין רואה גם הזמנות פתוחות (requested) בעיר שלו (סינון בצד-לקוח)
+      allow read: if isSignedIn()
+        && (
+          resource.data.customerUid == myUid()
+          || resource.data.riderUid == myUid()
+          || (isRiderClubOrAdmin() && resource.data.status == "requested")
+        );
+
+      // יצירת הזמנה:
+      // - רק לקוח מחובר
+      // - חייב להיות customerUid == myUid
+      // - סטטוס התחלתי תמיד requested
+      allow create: if isSignedIn()
+        && request.resource.data.customerUid == myUid()
+        && request.resource.data.status == "requested";
+
+      // עדכון הזמנה:
+      // 1) לקוח יכול לבטל הזמנה במצב requested בלבד
+      // 2) ריידר מועדון/אדמין יכול "לקחת" הזמנה במצב requested
+      // 3) ריידר שלקח את ההזמנה יכול להתקדם בסטטוסים (in_progress / completed / canceled)
+      allow update: if isSignedIn() && (
+        // 1) ביטול ע״י הלקוח לפני שנלקחה
+        (
+          resource.data.customerUid == myUid()
+          && resource.data.status == "requested"
+          && request.resource.data.status == "canceled"
+        )
+        ||
+        // 2) ריידר מועדון/אדמין מקבל הזמנה
+        (
+          isRiderClubOrAdmin()
+          && resource.data.status == "requested"
+          && request.resource.data.riderUid == myUid()
+          && request.resource.data.status == "accepted"
+        )
+        ||
+        // 3) ריידר מנהל את הסטטוס בהזמנה שהוא קיבל
+        (
+          resource.data.riderUid == myUid()
+          && request.resource.data.customerUid == resource.data.customerUid
+          && request.resource.data.status in ["in_progress", "completed", "canceled"]
+        )
+      );
+
+      // אין מחיקה של הזמנות (ארכיב היסטוריה)
+      allow delete: if false;
     }
 
     // ======================================================
